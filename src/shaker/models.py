@@ -31,6 +31,15 @@ class CompressionMode(Enum):
     STRIP = "strip"
 
 
+class OutputFormat(Enum):
+    """Output serialization format."""
+
+    MARKDOWN = "markdown"
+    XML = "xml"
+    JSON = "json"
+    PLAIN = "plain"
+
+
 class SymbolType(Enum):
     """Classification of extracted symbols for the call graph.
 
@@ -215,6 +224,13 @@ class Config:
     always_include: tuple[str, ...] = ()
     always_exclude: tuple[str, ...] = ()
     config_path: Path | None = None
+    output_format: OutputFormat = OutputFormat.MARKDOWN
+    security_scan: bool = True
+    security_redact: bool = True
+    show_progress: bool = True
+    quiet: bool = False
+    enforce_max_tokens: bool = False
+    use_git_scoring: bool = True
 
 
 @dataclass
@@ -227,6 +243,40 @@ class DeliveryResult:
     clipboard_success: bool = False
     file_path: Path | None = None
     warnings: list[str] = field(default_factory=list)
+
+
+@dataclass(frozen=True)
+class SecurityFinding:
+    """A potential secret or sensitive data found in source code."""
+
+    file: Path
+    line_number: int
+    finding_type: str
+    severity: str
+    redacted: bool = False
+
+
+@dataclass
+class FileScore:
+    """Importance score for a single file."""
+
+    file: Path
+    score: float
+    importer_count: int
+    centrality: float
+    git_changes_30d: int = 0
+    is_focus: bool = False
+
+
+@dataclass
+class SecurityReport:
+    """Results of security scanning."""
+
+    findings: list[SecurityFinding] = field(default_factory=list)
+    total_scanned: int = 0
+    total_findings: int = 0
+    critical_count: int = 0
+    redacted_count: int = 0
 
 
 @dataclass
@@ -265,6 +315,8 @@ class PipelineState:
     stats: BuildStats = field(default_factory=BuildStats)
     warnings: list[str] = field(default_factory=list)
     errors: list[str] = field(default_factory=list)
+    security_report: SecurityReport | None = None
+    file_scores: dict[Path, FileScore] = field(default_factory=dict)
 
 
 __all__ = [
@@ -274,10 +326,14 @@ __all__ = [
     "CompressionMode",
     "Config",
     "DeliveryResult",
+    "FileScore",
     "ImportInfo",
+    "OutputFormat",
     "OutputMetadata",
     "ParsedFile",
     "PipelineState",
+    "SecurityFinding",
+    "SecurityReport",
     "Symbol",
     "SymbolType",
 ]

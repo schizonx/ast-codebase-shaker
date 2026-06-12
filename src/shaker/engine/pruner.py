@@ -3,6 +3,9 @@
 Parses each non-focus file according to the compression mode and
 produces a pruned string. Focus files are always kept at full detail.
 All pruned output is guaranteed to be valid Python (roundtrip-tested).
+
+When enforce_max_tokens is enabled, automatically adjusts compression
+depth for non-focus files to fit within the user's token budget.
 """
 
 from __future__ import annotations
@@ -11,6 +14,7 @@ import ast
 import logging
 from pathlib import Path
 
+from shaker.infra.tokens import count_tokens
 from shaker.models import CompressionMode, ParsedFile
 
 logger = logging.getLogger(__name__)
@@ -159,26 +163,93 @@ def prune_files(
     parsed: dict[Path, ParsedFile],
     focus_files: set[Path],
     mode: CompressionMode,
+    max_tokens: int | None = None,
+    enforce_max_tokens: bool = False,
 ) -> dict[Path, str]:
     """Prune all files according to the compression mode.
 
     Focus files are always kept at full detail regardless of mode.
 
+    When *enforce_max_tokens* is True and *max_tokens* is set, the
+    compression depth is automatically increased for non-focus files
+    to fit within the budget. The heuristic is:
+    - ratio > 2.0  → use strip mode for non-focus files
+    - ratio > 1.5  → use signatures mode for non-focus files
+    - ratio ≤ 1.5  → use user's chosen mode
+    Files are never silently excluded; budget is met by increasing
+    compression, not by dropping files.
+
     Args:
         parsed: Mapping of file paths to their parsed representations.
         focus_files: Set of file paths to preserve at full detail.
         mode: Compression mode to apply to non-focus files.
+        max_tokens: Token budget limit. When enforce_max_tokens is True,
+            compression depth auto-adjusts to fit within this budget.
+        enforce_max_tokens: When True, auto-select compression depth
+            based on token budget ratio. Default is False (backward
+            compatible: respect user's chosen mode).
 
     Returns:
         Mapping of file paths to their pruned source strings.
     """
+    effective_mode = _resolve_effective_mode(
+        parsed, focus_files, mode, max_tokens, enforce_max_tokens,
+    )
+
     result: dict[Path, str] = {}
     for fpath, pf in parsed.items():
         if fpath in focus_files:
             result[fpath] = pf.source
         else:
-            result[fpath] = _prune_file(pf, mode)
+            result[fpath] = _prune_file(pf, effective_mode)
     return result
+
+
+def _resolve_effective_mode(
+    parsed: dict[Path, ParsedFile],
+    focus_files: set[Path],
+    mode: CompressionMode,
+    max_tokens: int | None,
+    enforce_max_tokens: bool,
+) -> CompressionMode:
+    """Determine the effective compression mode based on budget.
+
+    If enforce_max_tokens is False or max_tokens is not set, returns
+    the user's chosen mode unchanged.
+
+    Args:
+        parsed: All parsed files.
+        focus_files: Files excluded from mode adjustment.
+        mode: User's chosen compression mode.
+        max_tokens: Token budget limit.
+        enforce_max_tokens: Whether to auto-adjust.
+
+    Returns:
+        The effective compression mode for non-focus files.
+    """
+    if not enforce_max_tokens or max_tokens is None:
+        return mode
+
+    total_source = "\n".join(pf.source for pf in parsed.values())
+    input_tokens = count_tokens(total_source)
+
+    if input_tokens == 0:
+        return mode
+
+    ratio = input_tokens / max_tokens
+    if ratio > 2.0:
+        logger.info(
+            "Token budget ratio %.1fx > 2.0: using strip mode for non-focus files",
+            ratio,
+        )
+        return CompressionMode.STRIP
+    if ratio > 1.5:
+        logger.info(
+            "Token budget ratio %.1fx > 1.5: using signatures mode for non-focus files",
+            ratio,
+        )
+        return CompressionMode.SIGNATURES
+    return mode
 
 
 def _prune_file(parsed: ParsedFile, mode: CompressionMode) -> str:

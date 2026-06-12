@@ -68,7 +68,7 @@ class TestCliVersion:
 
     def test_version_contains_number(self, runner: CliRunner):
         result = runner.invoke(cli, ["--version"])
-        assert "0.0.0" in result.output
+        assert "1.0.0" in result.output
 
 
 class TestCliErrors:

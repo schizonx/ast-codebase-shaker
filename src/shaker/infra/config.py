@@ -12,7 +12,7 @@ from pathlib import Path
 from typing import Any
 
 from shaker.constants import DEFAULT_MODE, SUPPORTED_MODES
-from shaker.models import CompressionMode, Config
+from shaker.models import CompressionMode, Config, OutputFormat
 
 
 def load_config(path: Path | None = None) -> Config:
@@ -56,7 +56,7 @@ def merge_config_with_cli(config: Config, cli_args: dict[str, Any]) -> Config:
         config: The base config loaded from .shakerrc.json.
         cli_args: Dict of CLI argument names to values.
             Recognized keys: 'mode', 'exclude', 'max_tokens',
-            'always_include', 'always_exclude'.
+            'always_include', 'always_exclude', 'format', 'quiet'.
 
     Returns:
         A new Config with CLI overrides applied.
@@ -81,6 +81,30 @@ def merge_config_with_cli(config: Config, cli_args: dict[str, Any]) -> Config:
     if cli_args.get("always_exclude") is not None:
         always_exclude = tuple(cli_args["always_exclude"])
 
+    output_format = config.output_format
+    if cli_args.get("format") is not None:
+        output_format = _validate_format(cli_args["format"])
+
+    quiet = config.quiet
+    if cli_args.get("quiet") is not None:
+        quiet = cli_args["quiet"]
+
+    show_progress = config.show_progress
+    if cli_args.get("no_progress") is True:
+        show_progress = False
+
+    security_scan = config.security_scan
+    if cli_args.get("no_security_scan") is True:
+        security_scan = False
+
+    security_redact = config.security_redact
+    if cli_args.get("security_warn") is True:
+        security_redact = False
+
+    enforce_max_tokens = config.enforce_max_tokens
+    if cli_args.get("enforce_max_tokens") is not None:
+        enforce_max_tokens = cli_args["enforce_max_tokens"]
+
     return Config(
         default_mode=mode,
         exclude_patterns=exclude_patterns,
@@ -88,6 +112,13 @@ def merge_config_with_cli(config: Config, cli_args: dict[str, Any]) -> Config:
         always_include=always_include,
         always_exclude=always_exclude,
         config_path=config.config_path,
+        output_format=output_format,
+        security_scan=security_scan,
+        security_redact=security_redact,
+        show_progress=show_progress,
+        quiet=quiet,
+        enforce_max_tokens=enforce_max_tokens,
+        use_git_scoring=config.use_git_scoring,
     )
 
 
@@ -169,6 +200,34 @@ def _parse_config(raw: dict[str, Any], config_path: Path | None) -> Config:
     if "always_exclude" in raw:
         always_exclude = _validate_string_list(raw["always_exclude"], "always_exclude")
 
+    output_format = OutputFormat.MARKDOWN
+    if "format" in raw:
+        output_format = _validate_format(raw["format"])
+
+    security_scan = True
+    if "security_scan" in raw:
+        security_scan = _validate_bool(raw["security_scan"], "security_scan")
+
+    security_redact = True
+    if "security_redact" in raw:
+        security_redact = _validate_bool(raw["security_redact"], "security_redact")
+
+    show_progress = True
+    if "show_progress" in raw:
+        show_progress = _validate_bool(raw["show_progress"], "show_progress")
+
+    quiet = False
+    if "quiet" in raw:
+        quiet = _validate_bool(raw["quiet"], "quiet")
+
+    enforce_max_tokens = False
+    if "enforce_max_tokens" in raw:
+        enforce_max_tokens = _validate_bool(raw["enforce_max_tokens"], "enforce_max_tokens")
+
+    use_git_scoring = True
+    if "use_git_scoring" in raw:
+        use_git_scoring = _validate_bool(raw["use_git_scoring"], "use_git_scoring")
+
     return Config(
         default_mode=mode,
         exclude_patterns=exclude_patterns,
@@ -176,6 +235,13 @@ def _parse_config(raw: dict[str, Any], config_path: Path | None) -> Config:
         always_include=always_include,
         always_exclude=always_exclude,
         config_path=config_path,
+        output_format=output_format,
+        security_scan=security_scan,
+        security_redact=security_redact,
+        show_progress=show_progress,
+        quiet=quiet,
+        enforce_max_tokens=enforce_max_tokens,
+        use_git_scoring=use_git_scoring,
     )
 
 
@@ -269,6 +335,51 @@ def _validate_max_tokens(value: int) -> int:
     return value
 
 
+def _validate_format(value: str) -> OutputFormat:
+    """Validate and convert a format string to an OutputFormat.
+
+    Args:
+        value: The format string (e.g., "markdown", "xml", "json", "plain").
+
+    Returns:
+        The corresponding OutputFormat.
+
+    Raises:
+        ValueError: If the format string is not valid.
+    """
+    if not isinstance(value, str):
+        raise ValueError(
+            f"Format must be a string, got {type(value).__name__}: {value!r}"
+        )
+    try:
+        return OutputFormat(value.lower())
+    except ValueError:
+        valid = ", ".join(f.value for f in OutputFormat)
+        raise ValueError(
+            f"Invalid format '{value}'. Must be one of: {valid}"
+        ) from None
+
+
+def _validate_bool(value: Any, field_name: str) -> bool:
+    """Validate that a config value is a boolean.
+
+    Args:
+        value: The value to validate.
+        field_name: Name of the config field (for error messages).
+
+    Returns:
+        The boolean value.
+
+    Raises:
+        ValueError: If value is not a bool.
+    """
+    if not isinstance(value, bool):
+        raise ValueError(
+            f"'{field_name}' must be a boolean, got {type(value).__name__}: {value!r}"
+        )
+    return value
+
+
 def _warn_unknown_fields(raw: dict[str, Any], config_path: Path | None) -> None:
     """Warn about unknown fields in the config dict.
 
@@ -276,7 +387,11 @@ def _warn_unknown_fields(raw: dict[str, Any], config_path: Path | None) -> None:
         raw: The full config dict.
         config_path: The config file path (for warning message).
     """
-    known = {"mode", "exclude", "max_tokens", "always_include", "always_exclude"}
+    known = {
+        "mode", "exclude", "max_tokens", "always_include", "always_exclude",
+        "format", "security_scan", "security_redact", "show_progress",
+        "quiet", "enforce_max_tokens", "use_git_scoring",
+    }
     unknown = set(raw.keys()) - known
     if unknown:
         path_str = f" {config_path}" if config_path else ""

@@ -250,3 +250,18 @@ _runtime_stdlib: frozenset[str] = (
 STDLIB_MODULES: frozenset[str] = (
     frozenset(_STDLIB_MODULE_NAMES) | _runtime_stdlib
 )
+
+SECRET_PATTERNS: dict[str, str] = {
+    "aws_access_key": r"(?:AKIA|ASIA)[A-Z0-9]{16}",
+    "aws_secret_key": r"(?i)aws_secret_access_key\s*=\s*['\"]?[A-Za-z0-9/+=]{40}['\"]?",
+    "github_token": r"(?:ghp_|gho_|github_pat_)[A-Za-z0-9_]{36,}",
+    "private_key": r"-----BEGIN (?:RSA |EC |OPENSSH )?PRIVATE KEY-----",
+    "generic_api_key": (
+        r"(?i)(?:api_key|api_secret|password|token)"
+        r"\s*[:=]\s*['\"]?[A-Za-z0-9_\-]{16,}['\"]?"
+    ),
+    "env_secret": (
+        r"(?i)(?:SECRET|PASSWORD|TOKEN|KEY)"
+        r"\s*=\s*['\"]?[A-Za-z0-9_\-]{16,}['\"]?"
+    ),
+}
