@@ -406,3 +406,213 @@ def test_v11_env_var_max_tokens(simple_app_path, runner, monkeypatch):
     monkeypatch.setenv("SHAKER_MAX_TOKENS", "5000")
     result = runner.invoke(cli, [str(simple_app_path), "--dry-run"])
     assert result.exit_code == 0
+
+
+# ---- v1.2: Security scanning ------------------------------------------------
+
+
+def test_v12_security_scan_detects_secret(simple_app_path, runner, tmp_path):
+    """v1.2: Security scanning must detect and redact secrets in output."""
+    import tempfile
+    from pathlib import Path as SysPath
+
+    with tempfile.TemporaryDirectory() as tmp:
+        tmp_dir = SysPath(tmp)
+        leaky = tmp_dir / "config.py"
+        leaky.write_text("AKIAIOSFODNN7EXAMPLE\n", encoding="utf-8")
+        out = tmp_path / "out.md"
+        result = runner.invoke(
+            cli, [str(tmp_dir), "-o", str(out), "--no-clipboard"]
+        )
+        assert result.exit_code == 0
+        content = out.read_text(encoding="utf-8")
+        assert "AKIAIOSFODNN7EXAMPLE" not in content
+
+
+def test_v12_security_warn_mode(simple_app_path, runner, tmp_path):
+    """v1.2: --security-warn must warn instead of redacting."""
+    import tempfile
+    from pathlib import Path as SysPath
+
+    with tempfile.TemporaryDirectory() as tmp:
+        tmp_dir = SysPath(tmp)
+        leaky = tmp_dir / "config.py"
+        leaky.write_text("AKIAIOSFODNN7EXAMPLE\n", encoding="utf-8")
+        out = tmp_path / "out.md"
+        result = runner.invoke(
+            cli, [str(tmp_dir), "--security-warn", "-o", str(out), "--no-clipboard"]
+        )
+        assert result.exit_code == 0
+
+
+def test_v12_security_scan_disabled(simple_app_path, runner, tmp_path):
+    """v1.2: --no-security-scan must skip scanning."""
+    import tempfile
+    from pathlib import Path as SysPath
+
+    with tempfile.TemporaryDirectory() as tmp:
+        tmp_dir = SysPath(tmp)
+        leaky = tmp_dir / "config.py"
+        leaky.write_text("AKIAIOSFODNN7EXAMPLE\n", encoding="utf-8")
+        out = tmp_path / "out.md"
+        result = runner.invoke(
+            cli, [str(tmp_dir), "--no-security-scan", "-o", str(out), "--no-clipboard"]
+        )
+        assert result.exit_code == 0
+        content = out.read_text(encoding="utf-8")
+        assert "AKIAIOSFODNN7EXAMPLE" in content
+
+
+# ---- v1.2: Multiple focus symbols -------------------------------------------
+
+
+def test_v12_multiple_focus(simple_app_path, runner):
+    """v1.2: Multiple --focus flags must resolve all symbols."""
+    result = runner.invoke(
+        cli,
+        [
+            str(simple_app_path),
+            "--focus", "auth.login",
+            "--focus", "utils.hash_password",
+            "--dry-run",
+        ],
+    )
+    assert result.exit_code == 0
+
+
+# ---- v1.2: Presets ----------------------------------------------------------
+
+
+def test_v12_preset_django(simple_app_path, runner):
+    """v1.2: --preset django must apply Django-specific excludes."""
+    result = runner.invoke(
+        cli,
+        [str(simple_app_path), "--preset", "django", "--dry-run"],
+    )
+    assert result.exit_code == 0
+
+
+def test_v12_preset_fastapi(simple_app_path, runner):
+    """v1.2: --preset fastapi must apply FastAPI-specific excludes."""
+    result = runner.invoke(
+        cli,
+        [str(simple_app_path), "--preset", "fastapi", "--dry-run"],
+    )
+    assert result.exit_code == 0
+
+
+def test_v12_preset_flask(simple_app_path, runner):
+    """v1.2: --preset flask must apply Flask-specific excludes."""
+    result = runner.invoke(
+        cli,
+        [str(simple_app_path), "--preset", "flask", "--dry-run"],
+    )
+    assert result.exit_code == 0
+
+
+# ---- v1.2: Budget enforcement -----------------------------------------------
+
+
+def test_v12_enforce_max_tokens(simple_app_path, runner):
+    """v1.2: --enforce-max-tokens must auto-adjust compression depth."""
+    result = runner.invoke(
+        cli,
+        [
+            str(simple_app_path),
+            "--max-tokens", "100",
+            "--enforce-max-tokens",
+            "--dry-run",
+        ],
+    )
+    assert result.exit_code == 0
+
+
+# ---- v1.2: File scoring -----------------------------------------------------
+
+
+def test_v12_score_files(simple_app_path, runner):
+    """v1.2: --score-files must display importance scores."""
+    result = runner.invoke(
+        cli,
+        [str(simple_app_path), "--score-files", "--dry-run"],
+    )
+    assert result.exit_code == 0
+
+
+# ---- v1.2: Output formats ---------------------------------------------------
+
+
+def test_v12_format_xml(simple_app_path, runner, tmp_path):
+    """v1.2: --format xml must produce valid XML output."""
+    out = tmp_path / "output.xml"
+    result = runner.invoke(
+        cli,
+        [str(simple_app_path), "--format", "xml", "-o", str(out), "--no-clipboard"],
+    )
+    assert result.exit_code == 0
+    content = out.read_text(encoding="utf-8")
+    assert "<?xml" in content
+    assert "<codebase-shaker>" in content
+
+
+def test_v12_format_json(simple_app_path, runner, tmp_path):
+    """v1.2: --format json must produce valid JSON output."""
+    import json
+
+    out = tmp_path / "output.json"
+    result = runner.invoke(
+        cli,
+        [str(simple_app_path), "--format", "json", "-o", str(out), "--no-clipboard"],
+    )
+    assert result.exit_code == 0
+    data = json.loads(out.read_text(encoding="utf-8"))
+    assert "metadata" in data
+    assert "files" in data
+
+
+def test_v12_format_plain(simple_app_path, runner, tmp_path):
+    """v1.2: --format plain must produce plain text output."""
+    out = tmp_path / "output.txt"
+    result = runner.invoke(
+        cli,
+        [str(simple_app_path), "--format", "plain", "-o", str(out), "--no-clipboard"],
+    )
+    assert result.exit_code == 0
+    content = out.read_text(encoding="utf-8")
+    assert "# " not in content  # No Markdown headers
+
+
+# ---- v1.2: Stats output file ------------------------------------------------
+
+
+def test_v12_stats_output(simple_app_path, runner, tmp_path):
+    """v1.2: --stats must write build stats to a JSON file."""
+    import json
+
+    stats_file = tmp_path / "stats.json"
+    result = runner.invoke(
+        cli,
+        [str(simple_app_path), "--stats", str(stats_file), "--no-clipboard"],
+    )
+    assert result.exit_code == 0
+    assert stats_file.exists()
+    data = json.loads(stats_file.read_text(encoding="utf-8"))
+    assert "stats" in data
+    assert "project" in data
+
+
+# ---- v1.2: Init command -----------------------------------------------------
+
+
+def test_v12_init_generates_config(tmp_path, runner, monkeypatch):
+    """v1.2: --init must generate a .shakerrc.json template."""
+    monkeypatch.chdir(tmp_path)
+    cfg = tmp_path / ".shakerrc.json"
+    result = runner.invoke(cli, ["--init"])
+    assert result.exit_code == 0
+    assert cfg.exists()
+    import json
+    data = json.loads(cfg.read_text(encoding="utf-8"))
+    assert "mode" in data
+    assert "format" in data
+    assert "_comment" not in data

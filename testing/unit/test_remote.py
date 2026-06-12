@@ -18,36 +18,48 @@ class TestCloneRemote:
     """Tests for clone_remote."""
 
     def test_successful_clone(self, tmp_path):
-        with patch("shaker.engine.remote.tempfile.mkdtemp", return_value=str(tmp_path)):
-            with patch("shaker.engine.remote.subprocess.run") as mock_run:
-                mock_run.return_value = MagicMock(returncode=0)
-                result = clone_remote("https://github.com/user/repo.git")
-                assert result == tmp_path
-                mock_run.assert_called_once_with(
-                    ["git", "clone", "--depth=1", "https://github.com/user/repo.git", str(tmp_path)],
-                    check=True,
-                    capture_output=True,
-                    text=True,
-                )
+        with (
+            patch("shaker.engine.remote.tempfile.mkdtemp", return_value=str(tmp_path)),
+            patch("shaker.engine.remote.subprocess.run") as mock_run,
+        ):
+            mock_run.return_value = MagicMock(returncode=0)
+            result = clone_remote("https://github.com/user/repo.git")
+            assert result == tmp_path
+            mock_run.assert_called_once_with(
+                ["git", "clone", "--depth=1",
+                 "https://github.com/user/repo.git", str(tmp_path)],
+                check=True,
+                capture_output=True,
+                text=True,
+            )
 
     def test_git_not_installed(self, tmp_path):
-        with patch("shaker.engine.remote.tempfile.mkdtemp", return_value=str(tmp_path)):
-            with patch("shaker.engine.remote.subprocess.run", side_effect=FileNotFoundError):
-                with patch("shaker.engine.remote.shutil.rmtree") as mock_rmtree:
-                    with pytest.raises(FileNotFoundError, match="git is not installed"):
-                        clone_remote("https://github.com/user/repo.git")
-                    mock_rmtree.assert_called_once()
+        with (
+            patch("shaker.engine.remote.tempfile.mkdtemp", return_value=str(tmp_path)),
+            patch(
+                "shaker.engine.remote.subprocess.run",
+                side_effect=FileNotFoundError,
+            ),
+            patch("shaker.engine.remote.shutil.rmtree") as mock_rmtree,
+        ):
+            with pytest.raises(FileNotFoundError, match="git is not installed"):
+                clone_remote("https://github.com/user/repo.git")
+            mock_rmtree.assert_called_once()
 
     def test_clone_failure(self, tmp_path):
-        with patch("shaker.engine.remote.tempfile.mkdtemp", return_value=str(tmp_path)):
-            with patch(
+        with (
+            patch("shaker.engine.remote.tempfile.mkdtemp", return_value=str(tmp_path)),
+            patch(
                 "shaker.engine.remote.subprocess.run",
-                side_effect=subprocess.CalledProcessError(1, "git", stderr="fatal: repo not found"),
-            ):
-                with patch("shaker.engine.remote.shutil.rmtree") as mock_rmtree:
-                    with pytest.raises(subprocess.CalledProcessError):
-                        clone_remote("https://github.com/user/nonexistent.git")
-                    mock_rmtree.assert_called_once()
+                side_effect=subprocess.CalledProcessError(
+                    1, "git", stderr="fatal: repo not found",
+                ),
+            ),
+            patch("shaker.engine.remote.shutil.rmtree") as mock_rmtree,
+        ):
+            with pytest.raises(subprocess.CalledProcessError):
+                clone_remote("https://github.com/user/nonexistent.git")
+            mock_rmtree.assert_called_once()
 
 
 class TestCleanupRemote:

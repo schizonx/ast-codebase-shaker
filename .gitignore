@@ -15,8 +15,11 @@ testing/outputs/*
 testing/logs/
 testing/reports/
 
-# Internal project memory (not for publication)
-projmemprog/
+# Internal project memory (keep v1.0 files)
+# projmemprog/ is partially tracked — v1.0/ directory is committed
+!projmemprog/
+!projmemprog/v1.0/
+!projmemprog/v1.0/*.md
 
 # Cloned repos for e2e testing
 testing/fixtures/repos/
@@ -29,6 +32,7 @@ __pycache__/
 *.pyc
 
 # Build artifacts
+build/
 dist/
 *.egg-info/
 

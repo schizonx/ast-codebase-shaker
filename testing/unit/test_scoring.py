@@ -6,9 +6,7 @@ Tests StaticScorer, GitScorer, and the score_files interface.
 from __future__ import annotations
 
 from pathlib import Path
-from unittest.mock import MagicMock, patch
-
-import pytest
+from unittest.mock import patch
 
 from shaker.engine.scoring import (
     GitScorer,
@@ -16,16 +14,17 @@ from shaker.engine.scoring import (
     score_files,
 )
 from shaker.models import (
-    BuildStats,
     CallGraph,
-    FileScore,
     ParsedFile,
     Symbol,
     SymbolType,
 )
 
 
-def _make_symbol(name: str, qname: str, file: Path, sym_type: SymbolType = SymbolType.FUNCTION) -> Symbol:
+def _make_symbol(
+    name: str, qname: str, file: Path,
+    sym_type: SymbolType = SymbolType.FUNCTION,
+) -> Symbol:
     return Symbol(
         name=name,
         qualified_name=qname,

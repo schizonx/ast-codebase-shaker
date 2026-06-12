@@ -8,8 +8,6 @@ from __future__ import annotations
 from pathlib import Path
 from unittest.mock import patch
 
-import pytest
-
 from shaker.engine.pruner import _resolve_effective_mode
 from shaker.models import CompressionMode, ParsedFile
 

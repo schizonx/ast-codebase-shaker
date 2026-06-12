@@ -883,7 +883,6 @@ def _generate_config_template() -> None:
         return
 
     template = {
-        "_comment": "Codebase Shaker configuration file",
         "mode": "signatures",
         "format": "markdown",
         "exclude": ["__pycache__/", "*.pyc", ".git/", "venv/", ".venv/"],
